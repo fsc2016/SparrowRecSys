@@ -67,6 +67,7 @@ public class DataManager {
                         String[] genreArray = genres.split("\\|");
                         for (String genre : genreArray){
                             movie.addGenre(genre);
+//                        加载类型索引电影列表中
                             addMovie2GenreIndex(genre, movie);
                         }
                     }
@@ -90,7 +91,6 @@ public class DataManager {
                     if (null == m){
                         continue;
                     }
-
                     String[] embStrings = movieEmbData[1].split("\\s");
                     Embedding movieEmb = new Embedding();
                     for (String element : embStrings){
@@ -134,6 +134,7 @@ public class DataManager {
                 String[] linkData = linkRawData.split(",");
                 if (linkData.length == 3){
                     int movieId = Integer.parseInt(linkData[0]);
+//                    更新movies的对应的其他网站的电影id
                     Movie movie = this.movieMap.get(movieId);
                     if (null != movie){
                         count++;

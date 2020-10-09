@@ -27,7 +27,7 @@ public class MovieService extends HttpServlet {
             //get movie object from DataManager
             Movie movie = DataManager.getInstance().getMovieById(Integer.parseInt(movieId));
 
-            //convert movie object to json format and return
+            //convert movie object to json format and return。此时会忽略emb和rating 信息
             if (null != movie) {
                 ObjectMapper mapper = new ObjectMapper();
                 String jsonMovie = mapper.writeValueAsString(movie);

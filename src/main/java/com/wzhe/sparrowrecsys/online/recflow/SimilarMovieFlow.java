@@ -32,7 +32,8 @@ public class SimilarMovieFlow {
     }
 
     /**
-     * generate candidates for similar movies recommendation
+     * 找出与目标电影相同类型评分前100的电影
+     * generate   for similar movies recommendation
      * @param movie input movie object
      * @return  movie candidates
      */

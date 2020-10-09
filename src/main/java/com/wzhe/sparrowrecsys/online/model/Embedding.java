@@ -30,6 +30,7 @@ public class Embedding {
     }
 
     //calculate cosine similarity between two embeddings
+    //计算俩个电影emb之间的相似度
     public double calculateSimilarity(Embedding otherEmb){
         if (null == embVector || null == otherEmb || null == otherEmb.getEmbVector()
                 || embVector.size() != otherEmb.getEmbVector().size()){
