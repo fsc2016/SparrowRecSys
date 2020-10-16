@@ -9,6 +9,8 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 
+
+
 object FeatureEngineering {
 
   //transform array(user_embedding, item_embedding) to vector for following vectorAssembler
@@ -257,6 +259,7 @@ object FeatureEngineering {
       .withColumn("genreIndexInt", col("genreIndex").cast(sql.types.IntegerType))
 
     val indexSize = genreIndexSamples.agg(max(col("genreIndexInt"))).head().getAs[Int](0) + 1
+    println(indexSize)
 
     val processedSamples =  genreIndexSamples
       .groupBy(col("movieId")).agg(collect_list("genreIndexInt").as("genreIndexes"))
@@ -265,6 +268,7 @@ object FeatureEngineering {
     val finalSample = processedSamples.withColumn("vector", array2vec(col("genreIndexes"),col("indexSize")))
     finalSample.printSchema()
     finalSample.show(10)
+    finalSample.select(col("vector")).show(10)
     //oneHotEncoderSamples.show(10)
   }
 
@@ -281,13 +285,18 @@ object FeatureEngineering {
         variance(col("rating")).as("ratingVar"))
         .withColumn("avgRatingVec", double2vec(col("avgRating")))
 
-    movieFeatures.select(col("avgRating")).show(1000)
+    movieFeatures.select(col("movieId"),col("ratingCount")).show(10)
+    movieFeatures.select(col("movieId"),col("avgRating")).show(10)
+    movieFeatures.select(col("movieId"),col("ratingVar")).show(10)
+    movieFeatures.select(col("movieId"),col("avgRatingVec")).show(10)
+    movieFeatures.show(10)
 
     val userFeatures = samples.groupBy(col("userId"))
       .agg(count(lit(1)).as("ratingCount"),
         avg(col("rating")).as("avgRating"),
         variance(col("rating")).as("ratingVar"))
 
+    userFeatures.show(10)
 
     val ratingCountDiscretizer = new QuantileDiscretizer()
       .setInputCol("ratingCount")
@@ -300,8 +309,7 @@ object FeatureEngineering {
     val featurePipeline = new Pipeline().setStages(pipelineStage)
 
     val movieProcessedFeatures = featurePipeline.fit(movieFeatures).transform(movieFeatures)
-
-    movieProcessedFeatures.show(100)
+    movieProcessedFeatures.show(10)
   }
 
   def main(args: Array[String]): Unit = {
@@ -314,21 +322,20 @@ object FeatureEngineering {
 
     val spark = SparkSession.builder.config(conf).getOrCreate()
 
-    /*
+
     val movieResourcesPath = this.getClass.getResource("/webroot/sampledata/movies.csv")
     val movieSamples = spark.read.format("csv").option("header", "true").load(movieResourcesPath.getPath)
     movieSamples.printSchema()
-    movieSamples.show(10)
+    movieSamples.show(10) //Normalizer、StandardScaler、RobustScaler、MinMaxScaler
 
-    //oneHotEncoderExample(rawSamples)
+//    oneHotEncoderExample(movieSamples)
     multiHotEncoderExample(movieSamples)
-     */
 
 
     val ratingsResourcesPath = this.getClass.getResource("/webroot/sampledata/ratings.csv")
 
     val ratingSamples = spark.read.format("csv").option("header", "true").load(ratingsResourcesPath.getPath)
-    ratingFeatures(ratingSamples)
+//    ratingFeatures(ratingSamples)
 
   }
 }
