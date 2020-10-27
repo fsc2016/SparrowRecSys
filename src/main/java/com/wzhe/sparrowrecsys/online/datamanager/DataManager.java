@@ -1,6 +1,9 @@
 package com.wzhe.sparrowrecsys.online.datamanager;
 
 import com.wzhe.sparrowrecsys.online.model.Embedding;
+import com.wzhe.sparrowrecsys.online.util.Config;
+import com.wzhe.sparrowrecsys.online.util.Utility;
+import redis.clients.jedis.Jedis;
 
 import java.io.File;
 import java.util.*;
@@ -11,8 +14,7 @@ import java.util.*;
 
 public class DataManager {
     //singleton instance
-    static DataManager instance;
-
+    private static volatile DataManager instance;
     HashMap<Integer, Movie> movieMap;
     HashMap<Integer, User> userMap;
     //genre reverse index for quick querying all movies in a genre
@@ -27,17 +29,22 @@ public class DataManager {
 
     public static DataManager getInstance(){
         if (null == instance){
-            instance = new DataManager();
+            synchronized (DataManager.class){
+                if (null == instance){
+                    instance = new DataManager();
+                }
+            }
         }
         return instance;
     }
 
     //load data from file system including movie, rating, link data and model data like embedding vectors.
-    public void loadData(String movieDataPath, String linkDataPath, String ratingDataPath, String movieEmbPath) throws Exception{
+    public void loadData(String movieDataPath, String linkDataPath, String ratingDataPath, String movieEmbPath, String userEmbPath, String movieRedisKey, String userRedisKey) throws Exception{
         loadMovieData(movieDataPath);
         loadLinkData(linkDataPath);
         loadRatingData(ratingDataPath);
-        loadMovieEmb(movieEmbPath);
+        loadMovieEmb(movieEmbPath, movieRedisKey);
+        loadUserEmb(userEmbPath, userRedisKey);
     }
 
     //load movie data from movies.csv
@@ -67,7 +74,6 @@ public class DataManager {
                         String[] genreArray = genres.split("\\|");
                         for (String genre : genreArray){
                             movie.addGenre(genre);
-//                        加载类型索引电影列表中
                             addMovie2GenreIndex(genre, movie);
                         }
                     }
@@ -79,30 +85,63 @@ public class DataManager {
     }
 
     //load movie embedding
-    private void loadMovieEmb(String movieEmbPath) throws Exception{
-        System.out.println("Loading movie embedding from " + movieEmbPath + " ...");
-        int validEmbCount = 0;
-        try (Scanner scanner = new Scanner(new File(movieEmbPath))) {
-            while (scanner.hasNextLine()) {
-                String movieRawEmbData = scanner.nextLine();
-                String[] movieEmbData = movieRawEmbData.split(":");
-                if (movieEmbData.length == 2){
-                    Movie m = getMovieById(Integer.parseInt(movieEmbData[0]));
-                    if (null == m){
-                        continue;
+    private void loadMovieEmb(String movieEmbPath, String embKey) throws Exception{
+        if (Config.EMB_DATA_SOURCE.equals(Config.DATA_SOURCE_FILE)) {
+            System.out.println("Loading movie embedding from " + movieEmbPath + " ...");
+            int validEmbCount = 0;
+            try (Scanner scanner = new Scanner(new File(movieEmbPath))) {
+                while (scanner.hasNextLine()) {
+                    String movieRawEmbData = scanner.nextLine();
+                    String[] movieEmbData = movieRawEmbData.split(":");
+                    if (movieEmbData.length == 2) {
+                        Movie m = getMovieById(Integer.parseInt(movieEmbData[0]));
+                        if (null == m) {
+                            continue;
+                        }
+                        m.setEmb(Utility.parseEmbStr(movieEmbData[1]));
+                        validEmbCount++;
                     }
-                    String[] embStrings = movieEmbData[1].split("\\s");
-                    Embedding movieEmb = new Embedding();
-                    for (String element : embStrings){
-                        movieEmb.addDim(Float.parseFloat(element));
-                    }
-
-                    m.setEmb(movieEmb);
-                    validEmbCount++;
                 }
             }
+            System.out.println("Loading movie embedding completed. " + validEmbCount + " movie embeddings in total.");
+        }else{
+            System.out.println("Loading movie embedding from Redis ...");
+            Set<String> movieEmbKeys = RedisClient.getInstance().keys(embKey + "*");
+            int validEmbCount = 0;
+            for (String movieEmbKey : movieEmbKeys){
+                String movieId = movieEmbKey.split(":")[1];
+                Movie m = getMovieById(Integer.parseInt(movieId));
+                if (null == m) {
+                    continue;
+                }
+                m.setEmb(Utility.parseEmbStr(RedisClient.getInstance().get(movieEmbKey)));
+                validEmbCount++;
+            }
+            System.out.println("Loading movie embedding completed. " + validEmbCount + " movie embeddings in total.");
         }
-        System.out.println("Loading movie embedding completed. " + validEmbCount + " movie embeddings in total.");
+    }
+
+    //load user embedding
+    private void loadUserEmb(String userEmbPath, String embKey) throws Exception{
+        if (Config.EMB_DATA_SOURCE.equals(Config.DATA_SOURCE_FILE)) {
+            System.out.println("Loading user embedding from " + userEmbPath + " ...");
+            int validEmbCount = 0;
+            try (Scanner scanner = new Scanner(new File(userEmbPath))) {
+                while (scanner.hasNextLine()) {
+                    String userRawEmbData = scanner.nextLine();
+                    String[] userEmbData = userRawEmbData.split(":");
+                    if (userEmbData.length == 2) {
+                        User u = getUserById(Integer.parseInt(userEmbData[0]));
+                        if (null == u) {
+                            continue;
+                        }
+                        u.setEmb(Utility.parseEmbStr(userEmbData[1]));
+                        validEmbCount++;
+                    }
+                }
+            }
+            System.out.println("Loading user embedding completed. " + validEmbCount + " user embeddings in total.");
+        }
     }
 
     //parse release year
@@ -134,7 +173,6 @@ public class DataManager {
                 String[] linkData = linkRawData.split(",");
                 if (linkData.length == 3){
                     int movieId = Integer.parseInt(linkData[0]);
-//                    更新movies的对应的其他网站的电影id
                     Movie movie = this.movieMap.get(movieId);
                     if (null != movie){
                         count++;
